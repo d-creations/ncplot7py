@@ -21,19 +21,4 @@ class Registry:
 
 registry = Registry()
 
-# Eagerly import built-in adapters so they register themselves
-try:
-    from ncplot7py.infrastructure.parsers.gcode_parser import register as _reg_p
-    from ncplot7py.infrastructure.machines.generic_machine import register as _reg_m
-    from ncplot7py.infrastructure.plotters.matplotlib_plotter import register as _reg_pl
 
-    _reg_p(registry)
-    _reg_m(registry)
-    _reg_pl(registry)
-except Exception:
-    # Keep registry import safe even if optional deps are missing
-    try:
-        _reg_p(registry)
-        _reg_m(registry)
-    except Exception:
-        pass

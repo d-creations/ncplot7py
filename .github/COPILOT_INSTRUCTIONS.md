@@ -224,6 +224,47 @@ Follow these practical rules for readable, maintainable code across the codebase
 	- Are there unit tests for domain/application logic and integration tests for adapters where needed?
 	- Is the change small and well-commented (or does it include a rationale in the PR)?
 
+Current project structure
+-------------------------
+The repository already follows the recommended clean-architecture layout. Use these locations when adding or editing files so Copilot suggestions target the correct layer.
+
+Top-level files
+- `LICENSE`, `README.md`, `pyproject.toml`, `dev-requirements.txt`
+- `.github/COPILOT_INSTRUCTIONS.md` (this file)
+
+Package layout (src-style)
+- `src/ncplot7py/` — main package root
+	- `cli/` — CLI entrypoint and command wiring
+		- `main.py` — CLI implementation (simulate, plot subcommands)
+	- `domain/` — pure domain dataclasses and exceptions
+		- `models.py` — NCNode, ToolpathPoint, MachineSpec, SimulationResult
+		- `exceptions.py` — domain-specific exception types
+	- `application/` — use-cases / orchestrators
+		- `simulate.py` — parse -> simulate orchestration utilities
+	- `interfaces/` — Protocols / interface definitions
+		- `parser.py` — `Parser` Protocol
+		- `machine.py` — `MachineDriver` Protocol
+		- `plotter.py` — `Plotter` Protocol
+		- (intended) `nc_control.py` — NC control Protocol / base class (interface for NC controllers)
+	- `infrastructure/` — concrete adapters and implementations (I/O, drivers, plotters)
+		- `parsers/gcode_parser.py` — minimal G-code parser (registers as `gcode`)
+		- `machines/generic_machine.py` — simple generic machine driver (registers as `generic`)
+		- `plotters/matplotlib_plotter.py` — optional matplotlib adapter (registers `matplotlib` plotter)
+		- `persistence/` — storage adapters (file-based persistence stubs)
+	- `shared/` — small shared helpers and registry
+		- `registry.py` — runtime registry resolving parsers/machines/plotters
+
+Tests and examples
+- `tests/unit/` — unit tests (e.g. `test_simulate_flow.py`)
+- `tests/integration/` — integration tests (parsing+simulate+plot if optional deps installed)
+- `examples/` and `data/nc-examples/` — sample NC files and fixtures for integration tests and demos
+
+Notes
+- Optional dependencies (plotting) are declared under `pyproject.toml` extras: `plotting = ["matplotlib>=3.0,<4.0"]`.
+- Concrete implementations register with the `shared.registry` so CLI and application code can resolve components by name (e.g. parser `gcode`, machine `generic`, plotter `matplotlib`).
+- When Copilot generates code that crosses layers, update or create files in the matching package path above.
+
+
 How Copilot should behave when editing code (updated)
 ----------------------------------------------------
 - When implementing features, prefer stdlib solutions first (os, pathlib, csv, json, tempfile, subprocess, builtins, typing, dataclasses).
@@ -255,5 +296,42 @@ I can also scaffold starter artifacts if you want:
 - `pyproject.toml` + minimal `src/` layout
 - Example `MetadataReader` Protocol + `NetCDFReader` implementation + unit/integration tests
 - A GitHub Actions workflow that runs Black, ruff/flake8, mypy, and the stdlib tests on PRs
+
+
+
+
+
+## Error handling (use the structured system)
+- Use `ExceptionNode` and `ExceptionTyps` from `ncplot7py.domain.exceptions`.
+- Prefer the helper `raise_nc_error(...)` to automatically populate trace and caret when possible.
+
+Example:
+```python
+from ncplot7py.domain.exceptions import ExceptionTyps, raise_nc_error
+
+if token not in allowed:
+    raise_nc_error(
+        ExceptionTyps.NCCodeErrors,
+        1001,  # see locales XML id "1:1001"
+        value=token,
+        file=filename,
+        line=lineno,
+        source_line=line_text,
+    )
+```
+
+-## Localization of messages
+- Message templates are in `src/ncplot7py/locales/{lang}.xml`.
+- Keys are `{typ_value}:{code}`. Use placeholders `{value}`, `{line}`, `{code}`, `{typ}`.
+- To format for output:
+```python
+from ncplot7py.domain.i18n import MessageCatalog
+text = MessageCatalog().format_exception(exc, lang="en")
+```
+
+## Tracing
+- Provide `file`, `line`, `source_line` (and `value`) when raising errors to get a caret under the offending token.
+- If you know the exact `column`, pass it; otherwise `raise_nc_error` will try to infer it by searching `value` in `source_line`.
+
 
 -- End of architecture-focused Copilot instructions --
