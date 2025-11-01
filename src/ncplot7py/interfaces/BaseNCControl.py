@@ -1,5 +1,8 @@
 from abc import ABC, abstractmethod
+from typing import TYPE_CHECKING
 
+if TYPE_CHECKING:
+    from typing import Any as LinkedNCCodeList  # Forward reference placeholder
 
 
 class NCCanal(ABC):
