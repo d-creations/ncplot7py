@@ -6,10 +6,16 @@ on:
   pull_request:
     branches: [ master, main ]
 
+# Limit permissions of GITHUB_TOKEN
+permissions:
+  contents: read
+
 jobs:
   test:
     name: Test on Python ${{ matrix.python-version }}
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     strategy:
       matrix:
         python-version: ["3.8", "3.9", "3.10", "3.11"]
@@ -49,6 +55,8 @@ jobs:
   lint:
     name: Lint with flake8
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
 
     steps:
       - name: Checkout repository
