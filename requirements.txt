@@ -1,0 +1,3 @@
+# Runtime dependencies
+# The project prefers Python stdlib, so this is minimal
+# Optional dependencies can be installed separately (e.g., matplotlib for plotting)

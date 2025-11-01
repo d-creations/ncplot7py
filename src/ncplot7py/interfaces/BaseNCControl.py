@@ -1,5 +1,16 @@
-from abc import ABC, abstractmethod
+from __future__ import annotations
 
+from abc import ABC, abstractmethod
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    # Import only for type checking to avoid runtime dependency
+    # Implementations will need to have NCAnalyzer package installed
+    try:
+        from NCAnalyzer.technicalService.LinkedNCcodeList import LinkedNCCodeList
+    except ImportError:
+        # Fallback for type checking when NCAnalyzer is not available
+        LinkedNCCodeList = object  # type: ignore
 
 
 class NCCanal(ABC):

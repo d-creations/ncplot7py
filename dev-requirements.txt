@@ -2,3 +2,5 @@
 # These are dev-only tools; runtime code should prefer the Python stdlib and keep
 # `dependencies` in `pyproject.toml` empty unless an explicit justification exists.
 
+pytest>=7.0.0
+flake8>=6.0.0
