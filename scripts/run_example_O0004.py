@@ -25,6 +25,7 @@ from typing import List, Tuple, Any
 from ncplot7py.application.nc_execution import NCExecutionEngine
 from ncplot7py.shared import configure_logging, get_message_stack, configure_i18n
 from ncplot7py.shared.nc_nodes import NCCommandNode
+from ncplot7py.shared.file_adapter import get_program
 
 
 class _Point:
@@ -84,12 +85,15 @@ class FileBasedFakeControl:
         return None
 
 
-def read_program_from_file(path: Path) -> str:
-    with path.open("r", encoding="utf-8", errors="replace") as fh:
-        # Return the whole file as a single program string; the project's
-        # parser will split commands by tokens and line numbering will be
-        # assigned by the engine when parsing.
-        return fh.read()
+def read_program_from_file(path: Path) -> list:
+    """Read a file and return one or more program strings using the file adapter.
+
+    Returns a list of program strings (each string contains commands separated
+    by ';') suitable for passing directly to NCExecutionEngine.get_Syncro_plot.
+    """
+    # Delegate to the shared file_adapter which handles parentheses removal and
+    # splitting into multiple programs if blank lines are used as separators.
+    return get_program(path, split_on_blank_line=True)
 
 
 def main(plot: bool = False) -> int:
@@ -106,12 +110,14 @@ def main(plot: bool = False) -> int:
         print(f"Data file not found: {data_file}")
         return 2
 
-    program = read_program_from_file(data_file)
+    programs = read_program_from_file(data_file)
 
     control = FileBasedFakeControl()
     engine = NCExecutionEngine(control)
 
-    plot_result = engine.get_Syncro_plot([program], synch=False)
+    # get_Syncro_plot expects a list of program strings; our adapter returns
+    # that directly, so pass it through.
+    plot_result = engine.get_Syncro_plot(programs, synch=False)
 
     print("Returned structure type:", type(plot_result))
     print("Number of canals:", len(plot_result) if isinstance(plot_result, list) else "n/a")
@@ -149,4 +155,4 @@ def main(plot: bool = False) -> int:
 
 
 if __name__ == '__main__':
-    sys.exit(main(plot=False))
+    sys.exit(main(plot=True))

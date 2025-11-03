@@ -13,36 +13,10 @@
 
     You should have received a copy of the GNU Affero General Public License
     along with this program.  If not, see <https://www.gnu.org/licenses/>. 
-    """
+"""
 
+from __future__ import annotations
 from abc import ABC, abstractmethod
-from enum import IntEnum
-
-from NCAnalyzer.technicalService.Point import Point
-from NCAnalyzer.technicalService.ExceptionNode import ExceptionNode, ExceptionTyps
-from NCAnalyzer.technicalService.LinkedNCcodeList import LinkedNCCodeList, NCNode
-from NCAnalyzer.technicalService.NCState import NCState
-
-
-class NCControlException(Exception):
-    """Errors that could raise in the NCControl
-    """
-    class CNCError(IntEnum):
-        NONE = 0
-        TO_MANY_GCODE_OF_ONE_GROUP = -1
-        CODE_ERROR = -2
-        SELECTED_CANAL_DOES_NOT_EXIST = -3
-        ERROR_IN_A_CHANAL = -4
-        WAIT_CODE_NOT_MATCH = -5
-    log_route : list
-    exception_node: ExceptionNode
-
-    def __init__(self, error: CNCError, value: str, log_route: list):
-        super().__init__()
-        self.log_route = log_route
-        self.exception_node = ExceptionNode(ExceptionTyps.CNCError, error,-1,
-                                            "NCControlException:" + str(error), value)
-        self.log_route.append(self.exception_node)
 
 
 class NCControl(ABC):

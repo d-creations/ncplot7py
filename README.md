@@ -7,6 +7,8 @@ NC Code Plot for CNC Code
 
  $env:PYTHONPATH = 'src'; python -m unittest discover -s tests/unit -p "test_*.py" -v
 
+ $env:PYTHONPATH='src'; python -m unittest discover -s tests/integration -p "test_*.py" -v
+
 ## Error handling and i18n
 
 This project provides structured, localized errors for CNC/NC parsing and runtime.
