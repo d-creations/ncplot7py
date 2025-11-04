@@ -11,16 +11,7 @@ from typing import Dict, List, Optional, Tuple
 from ncplot7py.domain.cnc_state import CNCState
 from ncplot7py.shared.nc_nodes import NCCommandNode
 from ncplot7py.domain.exec_chain import Handler
-
-
-@dataclass
-class Point:
-    x: float
-    y: float
-    z: float
-    a: float = 0.0
-    b: float = 0.0
-    c: float = 0.0
+from ncplot7py.shared.point import Point
 
 
 def _to_float(v: Optional[str], default: float = 0.0) -> float:
