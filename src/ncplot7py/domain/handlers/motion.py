@@ -68,12 +68,20 @@ class MotionHandler(Handler):
                 mapped = {"U": "X", "V": "Y", "W": "Z"}[key]
                 target_spec[mapped] = _to_float(v)
             # I,J,K,R,F handled later
+            # I,J,K,R,F handled later
+
+        # Normalize incoming axis values according to cnc_state axis_units
+        # (e.g. when X is interpreted as diameter the provided value should be
+        # divided by 2 to obtain internal radius coordinates).
+        normalized_target_spec = state.normalize_target_spec(target_spec)
 
         # get resolved absolute targets
-        resolved = state.resolve_target(target_spec, absolute=absolute_mode)
+        resolved = state.resolve_target(normalized_target_spec, absolute=absolute_mode)
 
         # interpolation parameters
         params = {k.upper(): _to_float(v) for k, v in node.command_parameter.items()}
+        # Normalize arc parameters (I/J/K offsets and R radius) to internal units
+        params = state.normalize_arc_params(params)
 
         if interp_mode == "G01" or interp_mode == "G00":
             points, duration = self._linear_interpolate(start, resolved, state)
@@ -143,12 +151,46 @@ class MotionHandler(Handler):
             if d2 == 0.0:
                 raise ValueError("Invalid arc with zero chord length")
             h = math.sqrt(max(0.0, r * r - d2 / 4.0)) / math.sqrt(d2)
-            # two possible centers; choose one based on cw flag
+            # two possible centers
             cx1 = mx - h * dy
             cy1 = my + h * dx
             cx2 = mx + h * dy
             cy2 = my - h * dx
-            cx, cy = (cx1, cy1) if cw else (cx2, cy2)
+            # Determine which center yields the requested sweep direction
+            # and prefer the smaller absolute sweep (minor arc) when both
+            # satisfy the direction. Compute sweep angles for both centers
+            # and pick the best candidate.
+            def sweep_for_center(cx_c, cy_c):
+                a0_c = math.atan2(sy - cy_c, sx - cx_c)
+                a1_c = math.atan2(ey - cy_c, ex - cx_c)
+                da_c = a1_c - a0_c
+                # normalize to [-pi, pi]
+                if da_c > math.pi:
+                    da_c -= 2 * math.pi
+                if da_c < -math.pi:
+                    da_c += 2 * math.pi
+                return da_c
+
+            da1 = sweep_for_center(cx1, cy1)
+            da2 = sweep_for_center(cx2, cy2)
+
+            # For cw=True we want a negative sweep (clockwise), for cw=False
+            # we want a positive sweep (counter-clockwise). Prefer the center
+            # that matches the desired sign; if both match or neither match,
+            # pick the one with smaller absolute sweep (minor arc).
+            def matches_cw(da_val, cw_flag):
+                return (da_val < 0) if cw_flag else (da_val > 0)
+
+            if matches_cw(da1, cw) and not matches_cw(da2, cw):
+                cx, cy = cx1, cy1
+            elif matches_cw(da2, cw) and not matches_cw(da1, cw):
+                cx, cy = cx2, cy2
+            else:
+                # both match or both don't — choose the smaller absolute sweep
+                if abs(da1) <= abs(da2):
+                    cx, cy = cx1, cy1
+                else:
+                    cx, cy = cx2, cy2
         else:
             # cannot compute arc center
             raise ValueError("Arc requires I/J or R parameter")
@@ -156,12 +198,35 @@ class MotionHandler(Handler):
         # compute start and end angles
         a0 = math.atan2(sy - cy, sx - cx)
         a1 = math.atan2(ey - cy, ex - cx)
-        # sweep angle
-        da = a1 - a0
-        if cw and da > 0:
-            da -= 2 * math.pi
-        if (not cw) and da < 0:
-            da += 2 * math.pi
+
+        # Robust sweep normalization:
+        # - normalize difference into (-pi, pi]
+        # - consider candidates da, da +/- 2pi and pick the candidate that
+        #   matches the requested direction (CW -> negative, CCW -> positive)
+        #   and has the smallest absolute magnitude. If no candidate matches
+        #   the requested sign (rare), pick the candidate with the smallest
+        #   absolute value (minor arc).
+        def _normalize_sweep(a_start: float, a_end: float, cw_flag: bool) -> float:
+            raw = a_end - a_start
+            # map to (-pi, pi]
+            da = (raw + math.pi) % (2 * math.pi) - math.pi
+            # consider equivalent representations
+            two_pi = 2 * math.pi
+            candidates = [da, da - two_pi, da + two_pi]
+
+            # desired sign: negative for cw (G02), positive for ccw (G03)
+            if cw_flag:
+                matching = [d for d in candidates if d < 0]
+            else:
+                matching = [d for d in candidates if d > 0]
+
+            if matching:
+                # pick the matching candidate with minimal absolute sweep
+                return min(matching, key=abs)
+            # fallback: choose the minor arc (smallest absolute value)
+            return min(candidates, key=abs)
+
+        da = _normalize_sweep(a0, a1, cw)
 
         arc_length = abs(da) * math.hypot(sx - cx, sy - cy)
         # n segments

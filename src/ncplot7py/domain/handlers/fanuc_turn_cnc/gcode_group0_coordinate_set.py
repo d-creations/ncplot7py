@@ -7,7 +7,7 @@ from ncplot7py.shared.nc_nodes import NCCommandNode
 from ncplot7py.domain.cnc_state import CNCState
 
 
-class GCodeGroup0ExecChainLink(Handler):
+class GCodeGroup0CoordinateSetExecChainLink(Handler):
     """Handle G50 (set offsets) and G28 (go to reference) and small misc.
 
     Behavior is adapted from the user example but uses `CNCState` storage
@@ -85,4 +85,4 @@ class GCodeGroup0ExecChainLink(Handler):
         return None, None
 
 
-__all__ = ["GCodeGroup0ExecChainLink"]
+__all__ = ["GCodeGroup0CoordinateSetExecChainLink"]

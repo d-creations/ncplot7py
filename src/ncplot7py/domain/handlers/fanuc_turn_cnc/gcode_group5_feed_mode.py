@@ -22,7 +22,7 @@ class FeedMode(Enum):
     FEED_PER_REV = "FEED_PER_REV"  # G99
 
 
-class GCodeGroup5ExecChainLink(Handler):
+class GCodeGroup5FeedModeExecChainLink(Handler):
     """Handle G98/G99 feed mode codes.
 
     - If both G98 and G99 are present in the same node an NC error is raised.
@@ -67,4 +67,4 @@ class GCodeGroup5ExecChainLink(Handler):
         return None, None
 
 
-__all__ = ["GCodeGroup5ExecChainLink", "FeedMode"]
+__all__ = ["GCodeGroup5FeedModeExecChainLink", "FeedMode"]

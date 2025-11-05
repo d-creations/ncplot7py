@@ -92,7 +92,8 @@ class VariableHandler(Handler):
     - Delegates to the next handler afterwards.
     """
 
-    BRACKET_RE = re.compile(r"\[([^\]]+)\]")
+    # Match innermost bracket expressions (no nested '[' or ']' inside)
+    BRACKET_RE = re.compile(r"\[([^\[\]]+)\]")
     VAR_RE = re.compile(r"#(\d+)")
 
     def __init__(self, next_handler: Optional[Handler] = None):
@@ -116,11 +117,29 @@ class VariableHandler(Handler):
     def _eval_expression(self, expr: str, state: CNCState) -> float:
         expr = expr.strip()
         # allow expressions like 10 or #500+5 or SIN(30)
+        # If the expression contains nested brackets evaluate them first so
+        # expressions like '2*[-1.73]' are reduced to '2*-1.73' before
+        # replacing variables and passing to the safe evaluator.
+        if "[" in expr and "]" in expr:
+            try:
+                expr = self._eval_and_replace_in_string(expr, state)
+            except Exception:
+                # fallback to original expr if replacement fails
+                pass
         expr_py = self._replace_vars_in_expr(expr)
         var_map = self._build_variable_map(state)
         return _safe_eval(expr_py, var_map)
 
     def _eval_and_replace_in_string(self, s: str, state: CNCState) -> str:
+        """Evaluate bracketed expressions, handling nested brackets.
+
+        The original implementation performed a single regex substitution which
+        failed for nested bracket expressions like '2*[-1.73]' inside an outer
+        '[ ... ]'. We fix this by repeatedly substituting the innermost
+        bracketed expressions until no brackets remain (or a safety limit is
+        reached).
+        """
+
         def repl(m: re.Match) -> str:
             inner = m.group(1)
             val = self._eval_expression(inner, state)
@@ -129,7 +148,24 @@ class VariableHandler(Handler):
                 return str(int(val))
             return str(val)
 
-        return self.BRACKET_RE.sub(repl, s)
+        # Iteratively replace bracketed expressions from the inside out.
+        # This handles nested brackets by evaluating inner brackets first.
+        out = s
+        max_iters = 50
+        it = 0
+        while True:
+            if not self.BRACKET_RE.search(out):
+                break
+            new_out = self.BRACKET_RE.sub(repl, out)
+            # if nothing changed, stop to avoid infinite loops
+            if new_out == out:
+                break
+            out = new_out
+            it += 1
+            if it >= max_iters:
+                # stop after a sane limit; return current string
+                break
+        return out
 
     def handle(self, node: NCCommandNode, state: CNCState) -> Tuple[Optional[list], Optional[float]]:
         # 1) variable assignment via node.variable_command (e.g. "#500=[10+5]")

@@ -31,6 +31,12 @@ class TestWhileDoEndIntegration(unittest.TestCase):
         # handler.
 
         ctrl = StatefulIsoTurnNCControl()
+        # Ensure this test uses radius interpretation for X (not diameter)
+        # to preserve the original expectation that G00 X1 results in X==1.0
+        try:
+            ctrl._canals[1]._state.set_axis_unit('X', 'radius')
+        except Exception:
+            pass
         # prepare nodes
         # initialize variable #1 = 3
         node_var = NCCommandNode(g_code_command=set(), command_parameter={}, variable_command="#1=[3]", nc_code_line_nr=1)

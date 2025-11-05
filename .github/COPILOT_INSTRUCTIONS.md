@@ -103,6 +103,17 @@ Tooling & CI recommendations
 - Packaging: `pyproject.toml` (PEP 621) with Poetry or pip-tools; keep `dependencies` minimal or empty unless runtime packages are justified.
 - CI: run format, lint, typecheck, and the stdlib unit tests on PRs; run integration tests on main branch or scheduled runs.
 
+CI / cocompiler test commands (PowerShell)
+-----------------------------------------
+When running tests in a Windows PowerShell environment (or in CI that emulates it), set the `PYTHONPATH` to the repository `src` directory so imports resolve correctly. The project uses the standard library `unittest` discovery for both unit and integration tests. Example commands to include in your CI job or cocompiler step:
+
+```powershell
+$env:PYTHONPATH = 'src'; python -m unittest discover -s tests/unit -p "test_*.py" -v
+$env:PYTHONPATH = 'src'; python -m unittest discover -s tests/integration -p "test_*.py" -v
+```
+
+Place these commands in the CI job that runs tests. If your CI runner uses bash or another shell, adapt the equivalent `PYTHONPATH=src python -m unittest ...` syntax for that shell.
+
 Dependencies policy
 -------------------
 - Default: prefer Python standard library for runtime features. Do not add new third-party runtime dependencies unless there is a strong, documented justification.

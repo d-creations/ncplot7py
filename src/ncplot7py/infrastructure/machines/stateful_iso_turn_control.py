@@ -8,15 +8,20 @@ from __future__ import annotations
 
 from typing import Dict, List, Optional, Tuple, Sequence
 import re
+import os
+import logging
 
+from ncplot7py.domain.handlers.fanuc_turn_cnc.gcode_group16_plane import GCodeGroup16PlaneExecChainLink
+from ncplot7py.domain.handlers.fanuc_turn_cnc.gcode_group21_polar_co import GCodeGroup21PolarCoExecChainLink
 from ncplot7py.interfaces.BaseNCCanal import NCControl as BaseNCControlInterface
 from ncplot7py.interfaces.BaseNCControl import NCCanal as BaseNCCanalInterface
 
-from ncplot7py.domain.handlers.gcode_group0 import GCodeGroup0ExecChainLink
+from ncplot7py.domain.handlers.fanuc_turn_cnc.gcode_group0_coordinate_set import GCodeGroup0CoordinateSetExecChainLink
+from ncplot7py.domain.handlers.star_machine.star_turn_handler import StarTurnHandler
 from ncplot7py.domain.handlers.motion import MotionHandler
 from ncplot7py.domain.handlers.variable import VariableHandler
 from ncplot7py.domain.handlers.control_flow import ControlFlowHandler
-from ncplot7py.domain.handlers.gcode_group2 import GCodeGroup2ExecChainLink
+from ncplot7py.domain.handlers.fanuc_turn_cnc.gcode_group2_speed_mode import GCodeGroup2SpeedModeExecChainLink
 from ncplot7py.shared.point import Point
 from ncplot7py.domain.cnc_state import CNCState
 from ncplot7py.shared.nc_nodes import NCCommandNode
@@ -34,13 +39,31 @@ class StatefulIsoTurnCanal(BaseNCCanalInterface):
         self._state = init_state or CNCState()
         # Chain: variables -> control flow -> group2 (speed mode) -> group0 -> motion
         motion = MotionHandler()
-        gcode0 = GCodeGroup0ExecChainLink(next_handler=motion)
-        gcode2 = GCodeGroup2ExecChainLink(next_handler=gcode0)
-        # Group5 handles feed mode (G98/G99) and sits between group2 and group0
+        gcode0 = GCodeGroup0CoordinateSetExecChainLink(next_handler=motion)
+        # insert StarTurnHandler between group2 and group0 so machine-specific
+        # Star Turn macros (e.g. G266) are handled before group0 coordinate
+        # adjustments and motion handling.
+        gcode2 = GCodeGroup2SpeedModeExecChainLink(next_handler=None)
+        gcode16 = GCodeGroup16PlaneExecChainLink(next_handler=gcode2)
+
+        gcode21 = GCodeGroup21PolarCoExecChainLink(next_handler=gcode16)
+        # wire star handler so gcode2 -> star -> gcode0
+        star = StarTurnHandler(next_handler=gcode0)
+        # now set gcode2 next to star
         try:
-            from ncplot7py.domain.handlers.gcode_group5 import GCodeGroup5ExecChainLink
-            gcode5 = GCodeGroup5ExecChainLink(next_handler=gcode2)
-            control = ControlFlowHandler(next_handler=gcode5)
+            gcode2.next_handler = star
+        except Exception:
+            # fallback: if assignment fails, attempt to create gcode2 with star directly
+            gcode2 = GCodeGroup2SpeedModeExecChainLink(next_handler=star)
+        # Group5 handles feed mode (G98/G99) and sits between group2 and group0
+        # The handler implementation is located in the fanuc_turn_cnc subpackage.
+        try:
+            from ncplot7py.domain.handlers.fanuc_turn_cnc.gcode_group5_feed_mode import GCodeGroup5FeedModeExecChainLink
+            from ncplot7py.domain.handlers.fanuc_turn_cnc.gcode_precheck import GcodePreCheckExecChainLink
+            gcode5 = GCodeGroup5FeedModeExecChainLink(next_handler=gcode21)
+            # insert precheck before group5 so we validate parameters early
+            precheck = GcodePreCheckExecChainLink(next_handler=gcode5)
+            control = ControlFlowHandler(next_handler=precheck)
         except Exception:
             # Fallback: if import fails, wire control directly to group2
             control = ControlFlowHandler(next_handler=gcode2)
@@ -50,6 +73,17 @@ class StatefulIsoTurnCanal(BaseNCCanalInterface):
         self._control_handler = control
         self._nodes: List[NCCommandNode] = []
         self._tool_path: List[Tuple[List[Point], float]] = []
+        # Default this canal to lathe-style behavior where X is interpreted as
+        # diameter when we created the canal without an explicit initial
+        # state. If the caller provided an `init_state` we must not override
+        # their axis unit choices (tests and callers may rely on a specific
+        # axis unit configuration).
+        try:
+            if init_state is None:
+                self._state.set_axis_unit('X', 'diameter')
+        except Exception:
+            # if state doesn't support the helper for any reason, ignore
+            pass
 
     def get_name(self) -> str:
         return self._name
@@ -105,8 +139,16 @@ class StatefulIsoTurnCanal(BaseNCCanalInterface):
         node = self._nodes[0] if len(self._nodes) > 0 else None
         max_steps = max(10000, len(self._nodes) * 100)
         steps = 0
+        logger = logging.getLogger(__name__)
         while node is not None and steps < max_steps:
             pts, dur = self._chain.handle(node, self._state)
+            if logger.isEnabledFor(logging.DEBUG):
+                try:
+                    ln = getattr(node, 'nc_code_line_nr', None)
+                    g = getattr(node, 'g_code', None)
+                    logger.debug("node idx=%s line=%s g_code=%s -> pts=%s dur=%s", steps, ln, g, 'Y' if pts is not None else 'N', dur)
+                except Exception:
+                    logger.debug("node idx=%s -> pts=%s dur=%s", steps, 'Y' if pts is not None else 'N', dur)
             if pts is not None:
                 self._tool_path.append((pts, dur or 0.0))
             # follow pointer (handlers may have updated it)

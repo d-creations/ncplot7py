@@ -4,6 +4,7 @@ NC Code Plot for CNC Code
 
 
 # run Tests
+& C:/Users/Damian/Project/ncplot7py/ncplot7py/.venv/Scripts/Activate.ps1
 
  $env:PYTHONPATH = 'src'; python -m unittest discover -s tests/unit -p "test_*.py" -v
 

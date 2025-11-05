@@ -20,7 +20,7 @@ class SpeedMode(Enum):
     CONSTANT_REV = "CONSTANT_REV"  # G97
 
 
-class GCodeGroup2ExecChainLink(Handler):
+class GCodeGroup2SpeedModeExecChainLink(Handler):
     """Handle G96/G97 surface speed modal codes.
 
     Behavior:
@@ -69,4 +69,4 @@ class GCodeGroup2ExecChainLink(Handler):
         return None, None
 
 
-__all__ = ["GCodeGroup2ExecChainLink", "SpeedMode"]
+__all__ = ["GCodeGroup2SpeedModeExecChainLink", "SpeedMode"]

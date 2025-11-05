@@ -45,6 +45,11 @@ class CNCState:
     axis_multipliers: Dict[AxisName, Numeric] = field(default_factory=dict)
     axis_override_feeds: Dict[AxisName, Numeric] = field(default_factory=dict)
 
+    # Per-axis unit interpretation: 'radius' or 'diameter'. Internally we
+    # prefer to work in radius (true distances). When an axis is marked as
+    # 'diameter' incoming values on that axis should be divided by 2.
+    axis_units: Dict[AxisName, str] = field(default_factory=lambda: {"X": "radius", "Y": "radius", "Z": "radius"})
+
     # Motion & tooling fields
     feed_rate: Optional[Numeric] = None
     spindle_speed: Optional[Numeric] = None
@@ -78,6 +83,59 @@ class CNCState:
     def update_axes(self, updates: Dict[AxisName, Numeric]) -> None:
         for k, v in updates.items():
             self.set_axis(k, float(v))
+
+    # --- axis unit helpers ------------------------------------------
+    def get_axis_unit(self, name: AxisName) -> str:
+        """Return the unit interpretation for an axis: 'radius' or 'diameter'."""
+        return str(self.axis_units.get(name, "radius"))
+
+    def set_axis_unit(self, name: AxisName, unit: str) -> None:
+        """Set the unit interpretation for an axis. Accepts 'radius' or 'diameter'."""
+        self.axis_units[name] = str(unit)
+
+    def is_axis_diameter(self, name: AxisName) -> bool:
+        return self.get_axis_unit(name).lower() == "diameter"
+
+    def normalize_axis_value(self, name: AxisName, value: Numeric) -> Numeric:
+        """Normalize a numeric value for the given axis to internal units (radius).
+
+        If the axis is marked as 'diameter' this divides the value by 2. Preserves
+        sign and numeric type.
+        """
+        try:
+            v = float(value)
+        except Exception:
+            return 0.0
+        return v / 2.0 if self.is_axis_diameter(name) else v
+
+    def normalize_target_spec(self, target_spec: Dict[AxisName, Numeric]) -> Dict[AxisName, Numeric]:
+        """Return a new target spec with per-axis normalization applied.
+
+        This does not mutate the original dict.
+        """
+        return {ax: self.normalize_axis_value(ax, val) for ax, val in target_spec.items()}
+
+    def normalize_arc_params(self, params: Dict[str, Numeric]) -> Dict[str, Numeric]:
+        """Normalize common arc parameters (I,J,K,R) into internal units.
+
+        - I -> X offset, J -> Y offset, K -> Z offset
+        - R is treated as a radial distance: if either X or Y is set to
+          'diameter' we assume R was provided in diameter units and divide by 2.
+          This is a reasonable heuristic for XY-plane arcs on lathes.
+        """
+        p = dict(params)
+        if "I" in p:
+            p["I"] = float(self.normalize_axis_value("X", p.get("I", 0.0)))
+        if "J" in p:
+            p["J"] = float(self.normalize_axis_value("Y", p.get("J", 0.0)))
+        if "K" in p:
+            p["K"] = float(self.normalize_axis_value("Z", p.get("K", 0.0)))
+        if "R" in p:
+            # Treat R as a true radial distance. Do not alter R based on
+            # per-axis 'diameter' interpretation — R is a geometric radius
+            # and should match the units of the provided coordinates.
+            p["R"] = float(p.get("R", 0.0))
+        return p
 
     def apply_offsets(self) -> Dict[AxisName, Numeric]:
         """Return axes with offsets applied (doesn't mutate state)."""

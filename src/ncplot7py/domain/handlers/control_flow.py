@@ -13,6 +13,8 @@ from __future__ import annotations
 
 import re
 from typing import Optional, Tuple
+import os
+import logging
 
 from ncplot7py.domain.exec_chain import Handler
 from ncplot7py.shared.nc_nodes import NCCommandNode
@@ -106,6 +108,14 @@ class ControlFlowHandler(Handler):
         return None
 
     def _is_true(self, cond_text: str, state: CNCState) -> bool:
+        logger = logging.getLogger(__name__)
+        # strip surrounding brackets which may come from parsed tokens
+        try:
+            cond_text = cond_text.strip()
+            if cond_text.startswith("[") and cond_text.endswith("]"):
+                cond_text = cond_text[1:-1]
+        except Exception:
+            pass
         # detect operators GT, LT, GE, LE, EQ
         for op in ("GE", "LE", "GT", "LT", "EQ"):
             if op in cond_text:
@@ -114,17 +124,32 @@ class ControlFlowHandler(Handler):
                     lv = self._eval_helper._eval_expression(left, state)
                     rv = self._eval_helper._eval_expression(right, state)
                 except Exception:
+                    logger.debug("_is_true failed eval for cond=%s left=%s right=%s", cond_text, left, right, exc_info=True)
+                    try:
+                        logger.debug("_is_true state.parameters snapshot: %s", getattr(state, 'parameters', None))
+                    except Exception:
+                        pass
                     return False
                 if op == "GT":
-                    return float(lv) > float(rv)
+                    result = float(lv) > float(rv)
+                    logger.debug("_is_true: %s GT %s -> %s", lv, rv, result)
+                    return result
                 if op == "LT":
-                    return float(lv) < float(rv)
+                    result = float(lv) < float(rv)
+                    logger.debug("_is_true: %s LT %s -> %s", lv, rv, result)
+                    return result
                 if op == "GE":
-                    return float(lv) >= float(rv)
+                    result = float(lv) >= float(rv)
+                    logger.debug("_is_true: %s GE %s -> %s", lv, rv, result)
+                    return result
                 if op == "LE":
-                    return float(lv) <= float(rv)
+                    result = float(lv) <= float(rv)
+                    logger.debug("_is_true: %s LE %s -> %s", lv, rv, result)
+                    return result
                 if op == "EQ":
-                    return float(lv) == float(rv)
+                    result = float(lv) == float(rv)
+                    logger.debug("_is_true: %s EQ %s -> %s", lv, rv, result)
+                    return result
         return False
 
     def handle(self, node: NCCommandNode, state: CNCState) -> Tuple[Optional[list], Optional[float]]:
@@ -253,6 +278,38 @@ class ControlFlowHandler(Handler):
                         else:
                             # completed loop
                             del self._loop_counters[label]
+                    else:
+                        # If this DO was actually a WHILE (e.g. "WHILE[...]DO<label>"),
+                        # re-evaluate the condition here and jump back to the DO body
+                        # if the condition still holds.
+                        try:
+                            lc = do_node.loop_command
+                        except Exception:
+                            lc = None
+                        if lc and "WHILE" in lc:
+                            # extract WHILE token and condition similar to above
+                            command2 = re.sub(self.TOKEN_RE, r" \1", lc)
+                            tokens2 = [t for t in command2.split(" ") if t]
+                            for t3 in tokens2:
+                                if t3.startswith("WHILE"):
+                                    cond_text = t3[5:]
+                                    try:
+                                        if self._is_true(cond_text, state):
+                                            # condition still true -> jump back into loop body
+                                            node._next_ncCode = getattr(do_node, "_next_ncCode", do_node)
+                                        else:
+                                            # condition false -> ensure END falls through to next node
+                                            if self._nodes is not None:
+                                                try:
+                                                    end_idx = self._nodes.index(node)
+                                                    node._next_ncCode = self._nodes[end_idx + 1] if end_idx + 1 < len(self._nodes) else None
+                                                except Exception:
+                                                    # fallback: leave pointer as-is
+                                                    pass
+                                    except Exception:
+                                        # on error, fall through
+                                        pass
+                                    break
                 break
 
         return super().handle(node, state)
