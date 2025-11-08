@@ -41,7 +41,17 @@ class StatefulIsoTurnCanal(BaseNCCanalInterface):
         self._state = init_state or CNCState()
         # Chain: variables -> control flow -> group2 (speed mode) -> group0 -> motion
         motion = MotionHandler()
-        gcode0 = GCodeGroup0CoordinateSetExecChainLink(next_handler=motion)
+        # insert a small ModalHandler between group0 and motion so block
+        # parameters F and S are stored into the modal state before motion
+        # handling. This keeps modal updates centralized.
+        try:
+            from ncplot7py.domain.handlers.modal import ModalHandler
+            modal = ModalHandler(next_handler=motion)
+            gcode0 = GCodeGroup0CoordinateSetExecChainLink(next_handler=modal)
+        except Exception:
+            # fallback: if import fails for any reason, wire gcode0 directly
+            # to motion to preserve previous behaviour.
+            gcode0 = GCodeGroup0CoordinateSetExecChainLink(next_handler=motion)
         # insert StarTurnHandler between group2 and group0 so machine-specific
         # Star Turn macros (e.g. G266) are handled before group0 coordinate
         # adjustments and motion handling.

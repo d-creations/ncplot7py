@@ -94,6 +94,10 @@ class MotionHandler(Handler):
         # update state axes to endpoint
         state.update_axes(resolved)
 
+        # Modal parameter handling has been moved to a dedicated handler
+        # (`ModalHandler`) earlier in the chain. MotionHandler should not
+        # mutate modal state; it only consumes values from `state` to
+        # compute durations.
         return points, duration
 
     def _linear_interpolate(self, start: Dict[str, float], end: Dict[str, float], state: CNCState) -> Tuple[List[Point], float]:
@@ -106,12 +110,49 @@ class MotionHandler(Handler):
                       a=end.get("A", 0.0), b=end.get("B", 0.0), c=end.get("C", 0.0))
             return [p], 0.0
 
-        # determine number of segments
-        n = max(1, int(math.ceil(dist / self.max_segment)))
-        # compute duration using feed rate (assume feed_rate in units per minute)
+        # determine number of segments. Allow an optional per-state override
+        # so callers/tests can request higher resolution by setting
+        # `state.extra['max_segment']` to a smaller value (e.g. 0.05).
+        try:
+            eff_max_segment = float(getattr(state, "extra", {}).get("max_segment", self.max_segment) or self.max_segment)
+        except Exception:
+            eff_max_segment = float(self.max_segment)
+        # ensure sane lower bound
+        if eff_max_segment <= 0.0:
+            eff_max_segment = float(self.max_segment)
+        n = max(1, int(math.ceil(dist / eff_max_segment)))
+        # compute duration using feed rate. The state's `feed_rate` stores
+        # the raw F value which may be either "per minute" or "per
+        # revolution" depending on the feed mode. Convert to mm/s here.
         feed = state.feed_rate or 1.0
-        # convert feed (mm/min) -> mm/s
-        feed_mm_s = float(feed) / 60.0
+        # detect feed-per-revolution mode; FeedMode enum may be stored
+        # under state.extra['feed_mode'] either as Enum or its string value.
+        feed_mode = None
+        try:
+            feed_mode = getattr(state, "extra", {}).get("feed_mode", None)
+        except Exception:
+            feed_mode = None
+        # default: feed interpreted as mm/min
+        effective_feed_mm_per_min = float(feed)
+        try:
+            # try to import enum for a robust comparison; fall back to
+            # string compare if import fails.
+            from ncplot7py.domain.handlers.fanuc_turn_cnc.gcode_group5_feed_mode import FeedMode
+
+            if feed_mode == FeedMode.FEED_PER_REV or feed_mode == FeedMode.FEED_PER_REV.value:
+                # convert mm/rev -> mm/min using spindle speed (rpm)
+                rpm = float(state.spindle_speed or 1.0)
+                effective_feed_mm_per_min = float(feed) * rpm
+        except Exception:
+            try:
+                if feed_mode == "FEED_PER_REV":
+                    rpm = float(state.spindle_speed or 1.0)
+                    effective_feed_mm_per_min = float(feed) * rpm
+            except Exception:
+                effective_feed_mm_per_min = float(feed)
+
+        # convert mm/min -> mm/s
+        feed_mm_s = effective_feed_mm_per_min / 60.0
         duration = dist / feed_mm_s if feed_mm_s > 0 else 0.0
 
         points: List[Point] = []
@@ -229,12 +270,51 @@ class MotionHandler(Handler):
         da = _normalize_sweep(a0, a1, cw)
 
         arc_length = abs(da) * math.hypot(sx - cx, sy - cy)
-        # n segments
-        n = max(2, int(math.ceil(arc_length / self.max_segment)))
+        # n segments — allow per-state override like in linear interpolation
+        try:
+            eff_max_segment = float(getattr(state, "extra", {}).get("max_segment", self.max_segment) or self.max_segment)
+        except Exception:
+            eff_max_segment = float(self.max_segment)
+        if eff_max_segment <= 0.0:
+            eff_max_segment = float(self.max_segment)
+        n = max(2, int(math.ceil(arc_length / eff_max_segment)))
+        # Ensure a minimum angular resolution so small-radius arcs don't
+        # look like corners. Allow callers to override desired degrees per
+        # segment via state.extra['angle_per_segment_deg'] (smaller -> more
+        # segments). Default to 10 degrees per segment.
+        try:
+            desired_deg = float(getattr(state, "extra", {}).get("angle_per_segment_deg", 10.0) or 10.0)
+        except Exception:
+            desired_deg = 2.0
+        if desired_deg <= 0.0:
+            desired_deg = 2.0
+        min_n_by_angle = max(2, int(math.ceil(abs(da) / math.radians(desired_deg))))
+        if min_n_by_angle > n:
+            n = min_n_by_angle
 
-        # duration using feed rate
+        # duration using feed rate (see linear routine for comments)
         feed = state.feed_rate or 1.0
-        feed_mm_s = float(feed) / 60.0
+        feed_mode = None
+        try:
+            feed_mode = getattr(state, "extra", {}).get("feed_mode", None)
+        except Exception:
+            feed_mode = None
+
+        effective_feed_mm_per_min = float(feed)
+        try:
+            from ncplot7py.domain.handlers.fanuc_turn_cnc.gcode_group5_feed_mode import FeedMode
+            if feed_mode == FeedMode.FEED_PER_REV or feed_mode == FeedMode.FEED_PER_REV.value:
+                rpm = float(state.spindle_speed or 1.0)
+                effective_feed_mm_per_min = float(feed) * rpm
+        except Exception:
+            try:
+                if feed_mode == "FEED_PER_REV":
+                    rpm = float(state.spindle_speed or 1.0)
+                    effective_feed_mm_per_min = float(feed) * rpm
+            except Exception:
+                effective_feed_mm_per_min = float(feed)
+
+        feed_mm_s = effective_feed_mm_per_min / 60.0
         duration = arc_length / feed_mm_s if feed_mm_s > 0 else 0.0
 
         points: List[Point] = []
