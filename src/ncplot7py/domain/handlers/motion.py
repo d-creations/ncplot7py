@@ -156,6 +156,10 @@ class MotionHandler(Handler):
         duration = dist / feed_mm_s if feed_mm_s > 0 else 0.0
 
         points: List[Point] = []
+        # include explicit start point so joins between segments preserve
+        # exact continuity when plotting consecutive motions
+        points.append(Point(x=start.get("X", 0.0), y=start.get("Y", 0.0), z=start.get("Z", 0.0),
+                             a=start.get("A", 0.0), b=start.get("B", 0.0), c=start.get("C", 0.0)))
         for i in range(1, n + 1):
             t = i / n
             x = start.get("X", 0.0) + (end.get("X", start.get("X", 0.0)) - start.get("X", 0.0)) * t
@@ -318,6 +322,11 @@ class MotionHandler(Handler):
         duration = arc_length / feed_mm_s if feed_mm_s > 0 else 0.0
 
         points: List[Point] = []
+        # include explicit start point (theta = a0)
+        start_x = cx + math.cos(a0) * math.hypot(sx - cx, sy - cy)
+        start_y = cy + math.sin(a0) * math.hypot(sx - cx, sy - cy)
+        points.append(Point(x=start_x, y=start_y, z=start.get("Z", 0.0),
+                             a=start.get("A", 0.0), b=start.get("B", 0.0), c=start.get("C", 0.0)))
         for i in range(1, n + 1):
             t = i / n
             theta = a0 + da * t
