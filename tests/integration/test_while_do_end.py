@@ -4,7 +4,7 @@ import unittest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', 'src'))
 
-from ncplot7py.infrastructure.machines.stateful_iso_turn_control import StatefulIsoTurnNCControl
+from ncplot7py.infrastructure.machines.stateful_star_turn_control import StatefulIsoTurnNCControl
 from ncplot7py.shared import configure_logging, configure_i18n
 from ncplot7py.shared.nc_nodes import NCCommandNode
 from ncplot7py.domain.cnc_state import CNCState

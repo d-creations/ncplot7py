@@ -1,6 +1,6 @@
 import unittest
 
-from ncplot7py.infrastructure.machines.stateful_iso_turn_control import StatefulIsoTurnCanal
+from ncplot7py.infrastructure.machines.stateful_star_turn_control import StatefulIsoTurnCanal
 from ncplot7py.shared.nc_nodes import NCCommandNode
 from ncplot7py.domain.cnc_state import CNCState
 

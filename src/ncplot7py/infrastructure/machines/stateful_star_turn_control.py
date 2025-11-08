@@ -25,6 +25,8 @@ from ncplot7py.domain.handlers.fanuc_turn_cnc.gcode_group2_speed_mode import GCo
 from ncplot7py.shared.point import Point
 from ncplot7py.domain.cnc_state import CNCState
 from ncplot7py.shared.nc_nodes import NCCommandNode
+from ncplot7py.domain.exceptions import raise_nc_error, ExceptionTyps
+from ncplot7py.infrastructure.machines.star_canal_syncro import CanalSynchro
 
 
 class StatefulIsoTurnCanal(BaseNCCanalInterface):
@@ -73,6 +75,8 @@ class StatefulIsoTurnCanal(BaseNCCanalInterface):
         self._control_handler = control
         self._nodes: List[NCCommandNode] = []
         self._tool_path: List[Tuple[List[Point], float]] = []
+        # nodes corresponding to each entry in _tool_path (parallel list)
+        self._tool_nodes: List[NCCommandNode] = []
         # Default this canal to lathe-style behavior where X is interpreted as
         # diameter when we created the canal without an explicit initial
         # state. If the caller provided an `init_state` we must not override
@@ -163,6 +167,13 @@ class StatefulIsoTurnCanal(BaseNCCanalInterface):
                     logger.debug("node idx=%s -> pts=%s dur=%s", steps, 'Y' if pts is not None else 'N', dur)
             if pts is not None:
                 self._tool_path.append((pts, dur or 0.0))
+                # record the node that produced this tool_path segment so
+                # callers (e.g. synchronization) can align nodes with
+                # tool_path indices.
+                try:
+                    self._tool_nodes.append(node)
+                except Exception:
+                    pass
             # follow pointer (handlers may have updated it)
             next_node = getattr(node, "_next_ncCode", None)
             # if next_node is same as current, break to avoid tight loop
@@ -175,8 +186,12 @@ class StatefulIsoTurnCanal(BaseNCCanalInterface):
         return self._tool_path
 
     def get_exec_nodes(self) -> List[NCCommandNode]:
-        # Prefer the recorded execution sequence when available. Fall back
-        # to the original node list for compatibility.
+        # Prefer the recorded nodes that produced tool_path entries when
+        # available (ensures node/tool_path index alignment). Fall back to
+        # the execution sequence then to the original node list for
+        # compatibility.
+        if hasattr(self, "_tool_nodes") and self._tool_nodes:
+            return self._tool_nodes
         return getattr(self, "_exec_sequence", self._nodes)
 
 
@@ -233,7 +248,16 @@ class StatefulIsoTurnNCControl(BaseNCControlInterface):
         return self.count_of_canals
 
     def synchro_points(self, tool_paths, nodes):
-        # placeholder: no synchronization in this simple control
+        # perform synchronization of tool path timing across canals
+        # tool_paths: list of list of tuples (points_list, duration)
+        # nodes: list of list of NCCommandNode executed for each canal
+        # run synchronization handler
+        try:
+            syn = CanalSynchro(tool_paths, nodes)  # delegate to the star-machine specific synchronisation helper
+            syn.synchro_points()
+        except Exception:
+            # let domain exceptions propagate; unknown exceptions bubble up too
+            raise
         return None
 
 

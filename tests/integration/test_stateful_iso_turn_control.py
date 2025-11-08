@@ -6,7 +6,7 @@ from pathlib import Path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', 'src'))
 
 from ncplot7py.application.nc_execution import NCExecutionEngine
-from ncplot7py.infrastructure.machines.stateful_iso_turn_control import StatefulIsoTurnNCControl
+from ncplot7py.infrastructure.machines.stateful_star_turn_control import StatefulIsoTurnNCControl
 from ncplot7py.shared import configure_logging, configure_i18n, get_message_stack
 
 

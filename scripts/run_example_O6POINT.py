@@ -34,7 +34,7 @@ from ncplot7py.application.nc_execution import NCExecutionEngine
 from ncplot7py.shared import configure_logging, get_message_stack, configure_i18n
 from ncplot7py.shared.nc_nodes import NCCommandNode
 from ncplot7py.shared.file_adapter import get_program
-from ncplot7py.infrastructure.machines.stateful_iso_turn_control import StatefulIsoTurnNCControl
+from ncplot7py.infrastructure.machines.stateful_star_turn_control import StatefulIsoTurnNCControl
 
 
 class _Point:
