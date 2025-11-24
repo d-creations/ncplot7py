@@ -393,13 +393,36 @@ function updateVariables(variables) {
 }
 
 /**
+ * Clear toolpath and dispose of Three.js resources to prevent memory leaks
+ */
+function clearToolpath() {
+    while (toolpathGroup.children.length > 0) {
+        const child = toolpathGroup.children[0];
+        
+        // Dispose geometry
+        if (child.geometry) {
+            child.geometry.dispose();
+        }
+        
+        // Dispose material(s)
+        if (child.material) {
+            if (Array.isArray(child.material)) {
+                child.material.forEach(mat => mat.dispose());
+            } else {
+                child.material.dispose();
+            }
+        }
+        
+        toolpathGroup.remove(child);
+    }
+}
+
+/**
  * Render toolpath in 3D view
  */
 function renderToolpath(segments) {
-    // Clear existing toolpath
-    while (toolpathGroup.children.length > 0) {
-        toolpathGroup.remove(toolpathGroup.children[0]);
-    }
+    // Clear existing toolpath and dispose resources to prevent memory leaks
+    clearToolpath();
     
     if (!segments || segments.length === 0) {
         addMessage('No toolpath segments to display', 'info');
