@@ -1,6 +1,37 @@
 # NC-Edit7 CGI Server
 
-This directory contains the CGI server script for handling plot requests from the NC-Edit7 frontend.
+This repository contains the NC-Edit7 CNC plotting backend and web interface.
+
+## Web Interface
+
+The `web/` folder contains a complete web frontend for visualizing NC/G-code toolpaths:
+
+- **index.html** - Main application page
+- **app.js** - JavaScript application with Three.js 3D visualization
+
+### Features
+
+- **Machine Selection**: Choose from available CNC machines (ISO_MILL, FANUC_T, SB12RG, SR20JII)
+- **NC Code Editor**: Enter and edit G-code programs
+- **3D Plot Visualization**: Interactive 3D view of toolpaths using Three.js
+  - Orbit controls (rotate, pan, zoom)
+  - Preset views (Top, Front, Side)
+  - 2D/3D mode toggle
+- **Variable Display**: Shows NC program variables
+- **Background Color Picker**: Customize the plot background color
+- **Messages Panel**: View execution status and errors
+
+### Running the Web Interface
+
+1. Deploy the `web/` folder to your web server
+2. Configure the CGI script path in `app.js` (CONFIG.cgiUrl)
+3. Open `index.html` in a browser
+
+The interface works in offline/demo mode when the CGI backend is unavailable.
+
+## CGI Server
+
+This directory also contains the CGI server script for handling plot requests from the NC-Edit7 frontend.
 
 ## Overview
 
