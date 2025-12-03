@@ -38,30 +38,39 @@ def get_machine_regex_patterns(control_type: str) -> Dict[str, Any]:
 
     Returns a dictionary with pattern strings and descriptions.
     
-    Control type mapping:
-    - SIEMENS, SIEMENS_840D, MILL -> Siemens (R-parameters)
-    - TURN, FANUC, FANUC_STAR -> Fanuc (Hash-parameters)
+    Control type mapping (matching domain module):
+    - STAR, TURN -> Fanuc (Hash-parameters: #1, #2, etc.)
+    - SIEMENS, MILL -> Siemens (R-parameters: R1, R2, etc.)
+    - Default -> Fanuc Generic (Hash-parameters)
     """
+    control_upper = control_type.upper()
+    is_fanuc = "STAR" in control_upper or "TURN" in control_upper
+    is_siemens = "SIEMENS" in control_upper or "MILL" in control_upper
+    
     # Use domain module if available for machine-specific patterns
     if USE_DOMAIN_MODULE:
         patterns = domain_get_machine_regex_patterns(control_type)
         # Add variable_prefix for frontend to parse user input (e.g., "R5 = 5" or "#5 = 5")
-        # The domain module uses control_type heuristics: SIEMENS/MILL -> Siemens, STAR/TURN -> Fanuc
-        control_upper = control_type.upper()
-        if "SIEMENS" in control_upper or ("MILL" in control_upper and "FANUC" not in control_upper):
+        if is_fanuc:
+            patterns["variables"]["prefix"] = FANUC_STAR_CONFIG.variable_prefix
+        elif is_siemens:
             patterns["variables"]["prefix"] = SIEMENS_840D_CONFIG.variable_prefix
         else:
             patterns["variables"]["prefix"] = FANUC_STAR_CONFIG.variable_prefix
         return patterns
 
     # Fallback patterns if domain module is not available
-    # Determine variable pattern based on control type
-    control_upper = control_type.upper()
-    if "SIEMENS" in control_upper or ("MILL" in control_upper and "FANUC" not in control_upper):
+    # Determine variable pattern based on control type (matching domain module logic)
+    if is_fanuc:
+        var_pattern = r"#(\d+)"
+        var_prefix = "#"
+        var_description = "Variables #1 - #999"
+    elif is_siemens:
         var_pattern = r"R(\d+)"
         var_prefix = "R"
         var_description = "Variables R1 - R999"
     else:
+        # Default to Fanuc
         var_pattern = r"#(\d+)"
         var_prefix = "#"
         var_description = "Variables #1 - #999"
