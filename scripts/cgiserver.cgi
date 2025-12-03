@@ -9,6 +9,20 @@ import json
 import os
 from typing import Dict, List, Any, Optional
 
+# Add src to path to import domain module
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
+
+try:
+    from ncplot7py.domain.machines import (
+        get_machine_regex_patterns as domain_get_machine_regex_patterns,
+        get_machine_config,
+        FANUC_STAR_CONFIG,
+        SIEMENS_840D_CONFIG,
+    )
+    USE_DOMAIN_MODULE = True
+except ImportError:
+    USE_DOMAIN_MODULE = False
+
 # Set content type for CGI
 print("Content-Type: application/json")
 print()
@@ -19,12 +33,32 @@ def get_machine_regex_patterns(control_type: str) -> Dict[str, Any]:
 
     Each machine has specific patterns for:
     - tools: Regular tool calls (e.g., T1-T99)
-    - variables: Variable references (e.g., #1 - #999)
+    - variables: Variable references (e.g., #1 - #999 for Fanuc, R1 - R999 for Siemens)
     - keywords: Special codes like M-codes and extended T-codes
 
     Returns a dictionary with pattern strings and descriptions.
     """
-    # Base patterns common to most machines
+    # Use domain module if available for machine-specific patterns
+    if USE_DOMAIN_MODULE:
+        patterns = domain_get_machine_regex_patterns(control_type)
+        # Add variable_prefix for frontend to parse user input (e.g., "R5 = 5" or "#5 = 5")
+        if "SIEMENS" in control_type.upper() or "MILL" in control_type.upper():
+            patterns["variables"]["prefix"] = SIEMENS_840D_CONFIG.variable_prefix
+        else:
+            patterns["variables"]["prefix"] = FANUC_STAR_CONFIG.variable_prefix
+        return patterns
+
+    # Fallback patterns if domain module is not available
+    # Determine variable pattern based on control type
+    if "SIEMENS" in control_type.upper() or "MILL" in control_type.upper():
+        var_pattern = r"R(\d+)"
+        var_prefix = "R"
+        var_description = "Variables R1 - R999"
+    else:
+        var_pattern = r"#(\d+)"
+        var_prefix = "#"
+        var_description = "Variables #1 - #999"
+
     base_patterns = {
         "tools": {
             "pattern": r"T([1-9]|[1-9][0-9])(?!\d)",
@@ -32,8 +66,9 @@ def get_machine_regex_patterns(control_type: str) -> Dict[str, Any]:
             "range": {"min": 1, "max": 99}
         },
         "variables": {
-            "pattern": r"#([1-9]|[1-9][0-9]{1,2})(?!\d)",
-            "description": "Variables #1 - #999",
+            "pattern": var_pattern,
+            "description": var_description,
+            "prefix": var_prefix,
             "range": {"min": 1, "max": 999}
         },
         "keywords": {
@@ -49,20 +84,24 @@ def get_machine_regex_patterns(control_type: str) -> Dict[str, Any]:
         }
     }
 
-    # Patterns are currently the same for all control types
-    # This structure allows future customization per control type if needed
     return base_patterns
 
 
 def get_mock_machines() -> List[Dict[str, Any]]:
-    """Return list of available machines with their regex patterns"""
+    """Return list of available machines with their regex patterns.
+    
+    Control types:
+    - SIEMENS/MILL: Uses R-parameters (R1, R2, etc.)
+    - TURN/FANUC: Uses #-parameters (#1, #2, etc.)
+    """
     machines = [
-        {"machineName": "ISO_MILL", "controlType": "MILL"},
+        {"machineName": "ISO_MILL", "controlType": "SIEMENS"},
+        {"machineName": "SIEMENS_MILL", "controlType": "SIEMENS"},
         {"machineName": "FANUC_T", "controlType": "TURN"},
-        {"machineName": "SB12RG_F", "controlType": "MILL"},
-        {"machineName": "SB12RG_B", "controlType": "MILL"},
-        {"machineName": "SR20JII_F", "controlType": "MILL"},
-        {"machineName": "SR20JII_B", "controlType": "MILL"},
+        {"machineName": "SB12RG_F", "controlType": "TURN"},
+        {"machineName": "SB12RG_B", "controlType": "TURN"},
+        {"machineName": "SR20JII_F", "controlType": "TURN"},
+        {"machineName": "SR20JII_B", "controlType": "TURN"},
     ]
 
     # Add regex patterns to each machine
@@ -147,7 +186,7 @@ def handle_execute_programs(programs: List[Dict[str, Any]]) -> Dict[str, Any]:
         canal_nr = program_entry.get("canalNr", "1")
         
         # Validate machine name
-        valid_machines = ["SB12RG_F", "FANUC_T", "SR20JII_F", "SB12RG_B", "SR20JII_B", "ISO_MILL"]
+        valid_machines = ["SB12RG_F", "FANUC_T", "SR20JII_F", "SB12RG_B", "SR20JII_B", "ISO_MILL", "SIEMENS_MILL"]
         if machine_name not in valid_machines:
             messages.append(f"Invalid machine name: {machine_name}")
             continue
