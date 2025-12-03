@@ -37,12 +37,18 @@ def get_machine_regex_patterns(control_type: str) -> Dict[str, Any]:
     - keywords: Special codes like M-codes and extended T-codes
 
     Returns a dictionary with pattern strings and descriptions.
+    
+    Control type mapping:
+    - SIEMENS, SIEMENS_840D, MILL -> Siemens (R-parameters)
+    - TURN, FANUC, FANUC_STAR -> Fanuc (Hash-parameters)
     """
     # Use domain module if available for machine-specific patterns
     if USE_DOMAIN_MODULE:
         patterns = domain_get_machine_regex_patterns(control_type)
         # Add variable_prefix for frontend to parse user input (e.g., "R5 = 5" or "#5 = 5")
-        if "SIEMENS" in control_type.upper() or "MILL" in control_type.upper():
+        # The domain module uses control_type heuristics: SIEMENS/MILL -> Siemens, STAR/TURN -> Fanuc
+        control_upper = control_type.upper()
+        if "SIEMENS" in control_upper or ("MILL" in control_upper and "FANUC" not in control_upper):
             patterns["variables"]["prefix"] = SIEMENS_840D_CONFIG.variable_prefix
         else:
             patterns["variables"]["prefix"] = FANUC_STAR_CONFIG.variable_prefix
@@ -50,7 +56,8 @@ def get_machine_regex_patterns(control_type: str) -> Dict[str, Any]:
 
     # Fallback patterns if domain module is not available
     # Determine variable pattern based on control type
-    if "SIEMENS" in control_type.upper() or "MILL" in control_type.upper():
+    control_upper = control_type.upper()
+    if "SIEMENS" in control_upper or ("MILL" in control_upper and "FANUC" not in control_upper):
         var_pattern = r"R(\d+)"
         var_prefix = "R"
         var_description = "Variables R1 - R999"
@@ -91,17 +98,17 @@ def get_mock_machines() -> List[Dict[str, Any]]:
     """Return list of available machines with their regex patterns.
     
     Control types:
-    - SIEMENS/MILL: Uses R-parameters (R1, R2, etc.)
-    - TURN/FANUC: Uses #-parameters (#1, #2, etc.)
+    - SIEMENS_840D: Uses R-parameters (R1, R2, etc.) for Siemens controls
+    - FANUC_STAR: Uses #-parameters (#1, #2, etc.) for Fanuc/Star turning machines
     """
     machines = [
-        {"machineName": "ISO_MILL", "controlType": "SIEMENS"},
-        {"machineName": "SIEMENS_MILL", "controlType": "SIEMENS"},
-        {"machineName": "FANUC_T", "controlType": "TURN"},
-        {"machineName": "SB12RG_F", "controlType": "TURN"},
-        {"machineName": "SB12RG_B", "controlType": "TURN"},
-        {"machineName": "SR20JII_F", "controlType": "TURN"},
-        {"machineName": "SR20JII_B", "controlType": "TURN"},
+        {"machineName": "ISO_MILL", "controlType": "SIEMENS_840D"},
+        {"machineName": "SIEMENS_MILL", "controlType": "SIEMENS_840D"},
+        {"machineName": "FANUC_T", "controlType": "FANUC_STAR"},
+        {"machineName": "SB12RG_F", "controlType": "FANUC_STAR"},
+        {"machineName": "SB12RG_B", "controlType": "FANUC_STAR"},
+        {"machineName": "SR20JII_F", "controlType": "FANUC_STAR"},
+        {"machineName": "SR20JII_B", "controlType": "FANUC_STAR"},
     ]
 
     # Add regex patterns to each machine
