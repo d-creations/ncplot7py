@@ -8,6 +8,7 @@ with the previous implementation.
 from __future__ import annotations
 
 import time
+import re
 from typing import List, Dict, Optional, Any
 
 from ncplot7py.shared import (
@@ -102,6 +103,34 @@ class NCExecutionEngine:
     def get_cacluated_runtime(self) -> float:
         return self.caclulatet_runtime
 
+    def _get_canal_state(self, canal_index: int) -> Optional[Any]:
+        try:
+            canals = getattr(self.cnc_control, "_canals", None)
+            if isinstance(canals, dict):
+                canal = canals.get(canal_index + 1)
+                if canal is not None:
+                    return getattr(canal, "_state", None)
+        except Exception:
+            pass
+        return None
+
+    def _get_canal_variables(self, canal_index: int) -> Dict[str, float]:
+        state = self._get_canal_state(canal_index)
+        if state is None:
+            return {}
+
+        parameters = getattr(state, "parameters", None)
+        if not isinstance(parameters, dict):
+            return {}
+
+        variables: Dict[str, float] = {}
+        for key, value in parameters.items():
+            try:
+                variables[str(key)] = float(value)
+            except Exception:
+                continue
+        return variables
+
     def _ensure_parser(self):
         # Ensure a parser is registered (same strategy as cli.bootstrap)
         if registry.get("parser", "nc_command") is None:
@@ -122,6 +151,16 @@ class NCExecutionEngine:
         if parser_cls is None:
             raise RuntimeError("No NC command parser registered")
         return parser_cls()
+
+    def _split_program_lines(self, program: str) -> List[str]:
+        """Split an NC program string into command lines.
+
+        Supports both legacy semicolon-separated input and newline-separated
+        input, which is common when programs are pasted as multi-line text.
+        """
+        if program is None:
+            return []
+        return [line for line in re.split(r"(?:;|\r\n|\n|\r)", program) if line and line.strip()]
 
     def get_Syncro_plot(self, programs: List[str], synch: bool) -> List[Dict]:
         """Create the plot for the given NC `programs`.
@@ -157,15 +196,7 @@ class NCExecutionEngine:
         for program in programs:
             # Parse program into a list of command nodes
             node_list = []
-            # Split by semicolon but preserve empty lines to maintain line numbering
-            # We assume the input program uses ';' as line separator or we handle it.
-            # If the input string comes from a file with newlines, we might need to handle that.
-            # But based on existing code `program.split(";")`, we stick to that but don't filter empty ones immediately for counting.
-            
-            # Split by semicolon or newline to handle both formats
-            # We normalize newlines to semicolons first
-            normalized_program = program.replace('\n', ';')
-            raw_lines = normalized_program.split(";")
+            raw_lines = self._split_program_lines(program)
             for i, raw_line in enumerate(raw_lines):
                 # Skip empty lines for parsing, but 'i' (line number) increments naturally
                 if not raw_line.strip():
@@ -278,7 +309,11 @@ class NCExecutionEngine:
                         x.append(getattr(point, "x", None))
                         y.append(getattr(point, "y", None))
                         z.append(getattr(point, "z", None))
-                lines.append({"x": x, "y": y, "z": z, "t": t})
+                line_number = None
+                if canal_index < len(nodes) and len(nodes[canal_index]) > len(lines):
+                    line_number = getattr(nodes[canal_index][len(lines)], "nc_code_line_nr", None)
+
+                lines.append({"x": x, "y": y, "z": z, "t": t, "lineNumber": line_number})
                 try:
                     runtime += float(t)
                 except Exception:
@@ -294,6 +329,7 @@ class NCExecutionEngine:
                 "plot": lines,
                 "canalNr": self.cnc_control.get_canal_name(canal_index),
                 "programExec": linesExec,
+                "variables": self._get_canal_variables(canal_index),
             }
             canal_index += 1
             lines_list.append(canal)

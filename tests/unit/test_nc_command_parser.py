@@ -36,6 +36,19 @@ class TestNCCommandParser(unittest.TestCase):
         self.assertEqual(node.loop_command, "GOTO100")
         self.assertEqual(node.g_code, set())
 
+    def test_uppercase_trig_in_variable_command_not_split(self):
+        node = self.parser.parse("#8=#7+[#5-#6]*#20*TAN[[#4/2]]+COS[#1]", line_nr=10)
+        self.assertIn("TAN", node.variable_command)
+        self.assertIn("COS", node.variable_command)
+        self.assertEqual(node.command_parameter, {})
+
+    def test_fanuc_parenthesis_comment_is_ignored(self):
+        node = self.parser.parse("T0101(SR20 JII MODEL HEAD 1)")
+        self.assertEqual(node.command_parameter.get("T"), "0101")
+
+    def test_inline_macro_comment_is_ignored(self):
+        node = self.parser.parse("#501=0.2(SUREPAISSEUR DRESSAGE)")
+        self.assertEqual(node.variable_command, "#501=0.2")
 
 if __name__ == "__main__":
     unittest.main()
