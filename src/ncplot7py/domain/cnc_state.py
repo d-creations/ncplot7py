@@ -98,10 +98,7 @@ class CNCState:
         return self.axes.get(name, 0.0)
 
     def set_axis(self, name: AxisName, value: Numeric) -> None:
-        try:
-            val = float(value)
-        except ValueError:
-            val = 0.0
+        val = float(value)
         if name == "A" and getattr(self.machine_config, "a_axis_rollover", False):
             val = val % 360.0
             if val < 0:
@@ -191,10 +188,7 @@ class CNCState:
 
     # --- parameter helpers -------------------------------------------
     def set_parameter(self, name: str, value: Numeric) -> None:
-        try:
-            self.parameters[name] = float(value)
-        except ValueError:
-            self.parameters[name] = 0.0
+        self.parameters[name] = float(value)
 
     def get_parameter(self, name: str, default: Optional[Numeric] = None) -> Optional[Numeric]:
         return self.parameters.get(name, default)
