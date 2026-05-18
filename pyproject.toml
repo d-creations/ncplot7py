@@ -24,3 +24,19 @@ doctest-command = "python -m doctest -v src/ncplot7py/*.py"
 [project.optional-dependencies]
 plotting = ["matplotlib>=3.0,<4.0"]
 
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/ncplot7py"]
+ 
+[tool.hatch.build.targets.wheel.force-include]
+"config/machines.json" = "ncplot7py/config/machines.json"
+ 
+[tool.hatch.build.targets.sdist]
+include = [
+  "/src/ncplot7py",
+  "/config/machines.json",
+  "/README.md",
+  "/LICENSE",
+  "/tests",
+]
+ 
