@@ -44,9 +44,11 @@ MACHINE_CONFIGS: Dict[str, MachineConfig] = {}
 def load_machine_configs():
     global MACHINE_CONFIGS
     MACHINE_CONFIGS = {'FANUC_GENERIC': FANUC_GENERIC_CONFIG}
-    config_path = os.path.join(os.path.dirname(__file__), '..', '..', '..', 'config', 'machines.json')
     try:
-        with open(config_path, 'r') as f:
+        package_config_path = os.path.join(os.path.dirname(__file__), '..', 'config', 'machines.json')
+        legacy_config_path = os.path.join(os.path.dirname(__file__), '..', '..', '..', 'config', 'machines.json')
+        config_path = package_config_path if os.path.exists(package_config_path) else legacy_config_path
+        with open(config_path, 'r', encoding='utf-8') as f:
             data = json.load(f)
             
         # First pass: load base configs

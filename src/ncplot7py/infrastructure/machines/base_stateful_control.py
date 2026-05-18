@@ -207,6 +207,8 @@ HANDLER_REGISTRY = {
     # Base
     "motion": ("ncplot7py.domain.handlers.motion", "MotionHandler"),
     "modal": ("ncplot7py.domain.handlers.modal", "ModalHandler"),
+    "spindle_speed": ("ncplot7py.domain.handlers.modal", "ModalHandler"),
+    "wait_code": ("ncplot7py.domain.handlers.modal", "ModalHandler"),
     "tool_handler": ("ncplot7py.domain.handlers.tool_handler", "ToolHandler"),
     
     # Generic & Fanuc
